@@ -171,3 +171,31 @@ class Client(models.Model):
     def __str__(self):
         name = f"{self.first_name} {self.last_name or ''}".strip()
         return f"{name or self.telegram_username or self.telegram_id}"
+
+
+class MasterSchedule(models.Model):
+    master = models.ForeignKey(
+        Master,
+        on_delete=models.CASCADE,
+        related_name='schedules',
+        verbose_name='Мастер'
+    )
+    date = models.DateField(
+        verbose_name='Дата'
+    )
+    start_time = models.TimeField(
+        verbose_name='Начало работы'
+    )
+    end_time = models.TimeField(
+        verbose_name='Конец работы'
+    )
+
+    class Meta:
+        verbose_name = 'Расписание мастера'
+        verbose_name_plural = 'Расписания мастеров'
+
+        unique_together = ['master', 'date']
+        ordering = ['date', 'start_time']
+
+    def __str__(self):
+        return f"Расписание {self.master} на {self.date}"
