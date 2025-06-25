@@ -1,5 +1,6 @@
+from datetime import date, timedelta
 from django.core.management.base import BaseCommand
-from salon.models import Salon, Service, Master
+from salon.models import Salon, Service, Master, MasterSchedule
 
 
 class Command(BaseCommand):
@@ -88,3 +89,24 @@ class Command(BaseCommand):
                 master.services.set(template['services'])
 
         self.stdout.write(self.style.SUCCESS('Тестовые мастера успешно созданы и распределены по салонам!'))
+
+        MasterSchedule.objects.all().delete()
+        self.stdout.write(self.style.SUCCESS('Старые расписания удалены.'))
+
+        masters = Master.objects.all()
+        start_date = date.today()
+        end_date = start_date + timedelta(days=7)
+
+        current_date = start_date
+        while current_date <= end_date:
+            if current_date.weekday() != 6:
+                for master in masters:
+                    MasterSchedule.objects.create(
+                        master=master,
+                        date=current_date,
+                        start_time='10:00',
+                        end_time='19:00'
+                    )
+            current_date += timedelta(days=1)
+
+        self.stdout.write(self.style.SUCCESS(f'Расписание создано на неделю вперед!'))
