@@ -46,3 +46,47 @@ class Salon(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class Service(models.Model):
+    """Модель услуги/процедуры"""
+    name = models.CharField(
+        max_length=200,
+        verbose_name='Название услуги'
+    )
+    category = models.CharField(
+        max_length=100,
+        choices=[
+            ('coloring', 'Окрашивание'),
+            ('haircut', 'Стрижка и укладка'),
+            ('manicure', 'Маникюр'),
+            ('pedicure', 'Педикюр'),
+            ('makeup', 'Макияж'),
+            ('other', 'Другое'),
+        ],
+        verbose_name='Категория'
+    )
+    price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        verbose_name='Цена'
+    )
+    duration_minutes = models.PositiveIntegerField(
+        verbose_name='Длительность (минуты)'
+    )
+    is_active = models.BooleanField(
+        default=True,
+        verbose_name='Активна'
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name='Дата создания'
+    )
+
+    class Meta:
+        verbose_name = 'Услуга'
+        verbose_name_plural = 'Услуги'
+        ordering = ['category', 'name']
+
+    def __str__(self):
+        return f"{self.get_category_display()} - {self.name}"
