@@ -6,6 +6,11 @@ load_dotenv()
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+DEBUG = os.getenv('DEBUG', 'true').lower() in ['yes', '1', 'true']
+
+ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+
+SECRET_KEY = os.getenv('SECRET_KEY', 'REPLACE_ME')
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -49,3 +54,22 @@ DATABASES = {
         'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
     }
 }
+
+ROOT_URLCONF = 'beautycity.urls'
+
+AUTH_PASSWORD_VALIDATORS = [
+    {
+        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',  # noqa: E501
+    },
+    {
+        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',  # noqa: E501
+    },
+    {
+        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',  # noqa: E501
+    },
+    {
+        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',  # noqa: E501
+    },
+]
+
+STATIC_URL = '/static/'
