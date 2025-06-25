@@ -937,3 +937,14 @@ fabric.properties
 # Android studio 3.1+ serialized cache file
 .idea/caches/build_file_checksums.ser
 
+# Папки IDE
+.idea/
+
+# Кэш Python
+__pycache__/
+
+# База данных (если используешь sqlite для тестов)
+db.sqlite3
+
+# Файлы окружения (очень важно!)
+.env
