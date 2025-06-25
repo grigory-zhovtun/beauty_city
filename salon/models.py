@@ -125,3 +125,49 @@ class Master(models.Model):
 
     def __str__(self):
         return f"{self.first_name} {self.last_name}"
+
+
+class Client(models.Model):
+    telegram_id = models.BigIntegerField(
+        unique=True,
+        verbose_name='Telegram ID'
+    )
+    telegram_username = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        verbose_name='Telegram Username'
+    )
+    first_name = models.CharField(
+        max_length=100,
+        verbose_name='Имя'
+    )
+    last_name = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name='Фамилия'
+    )
+
+    phone_regex = RegexValidator(
+        regex=r'^\+?1?\d{9,15}$',
+        message="Номер телефона должен быть в формате: '+999999999'"
+    )
+    phone = models.CharField(
+        validators=[phone_regex],
+        max_length=17,
+        blank=True,
+        verbose_name='Телефон'
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name='Дата регистрации'
+    )
+
+    class Meta:
+        verbose_name = 'Клиент'
+        verbose_name_plural = 'Клиенты'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        name = f"{self.first_name} {self.last_name or ''}".strip()
+        return f"{name or self.telegram_username or self.telegram_id}"
