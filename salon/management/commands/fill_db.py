@@ -1,12 +1,12 @@
 from django.core.management.base import BaseCommand
-from salon.models import Salon, Service
+from salon.models import Salon, Service, Master
 
 
 class Command(BaseCommand):
     help = 'Заполняет базу данных тестовыми салонами'
 
     def handle(self, *args, **options):
-        # Очистим старые данные, чтобы не было дублей
+
         Salon.objects.all().delete()
         self.stdout.write(self.style.SUCCESS('Старые салоны удалены.'))
 
@@ -57,3 +57,34 @@ class Command(BaseCommand):
             Service.objects.create(**service_info)
 
         self.stdout.write(self.style.SUCCESS('Тестовые услуги успешно созданы!'))
+
+        Master.objects.all().delete()
+        self.stdout.write(self.style.SUCCESS('Старые мастера удалены.'))
+
+        salons = Salon.objects.all()
+        services = Service.objects.all()
+
+        hair_services = services.filter(category__in=['coloring', 'haircut'])
+        nail_services = services.filter(category__in=['manicure', 'pedicure'])
+        makeup_services = services.filter(category='makeup')
+
+        master_templates = [
+            {'first_name': 'Елена', 'last_name': 'Волосова', 'specialization': 'Парикмахер-стилист',
+             'services': hair_services},
+            {'first_name': 'Мария', 'last_name': 'Ноготкова', 'specialization': 'Мастер ногтевого сервиса',
+             'services': nail_services},
+            {'first_name': 'Анна', 'last_name': 'Мейкапова', 'specialization': 'Визажист', 'services': makeup_services},
+        ]
+
+        for salon in salons:
+            for template in master_templates:
+                master = Master.objects.create(
+                    first_name=template['first_name'],
+                    last_name=template['last_name'],
+                    specialization=template['specialization'],
+                    salon=salon
+                )
+
+                master.services.set(template['services'])
+
+        self.stdout.write(self.style.SUCCESS('Тестовые мастера успешно созданы и распределены по салонам!'))
