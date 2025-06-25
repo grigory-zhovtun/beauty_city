@@ -199,3 +199,57 @@ class MasterSchedule(models.Model):
 
     def __str__(self):
         return f"Расписание {self.master} на {self.date}"
+
+
+class Appointment(models.Model):
+    STATUS_CHOICES = [
+        ('confirmed', 'Подтверждена'),
+        ('cancelled', 'Отменена'),
+    ]
+
+    client = models.ForeignKey(
+        Client,
+        on_delete=models.CASCADE,
+        related_name='appointments',
+        verbose_name='Клиент'
+    )
+    master = models.ForeignKey(
+        Master,
+        on_delete=models.CASCADE,
+        related_name='appointments',
+        verbose_name='Мастер'
+    )
+    service = models.ForeignKey(
+        Service,
+        on_delete=models.CASCADE,
+        related_name='appointments',
+        verbose_name='Услуга'
+    )
+    # Мы дублируем салон здесь для более простых и быстрых запросов
+    salon = models.ForeignKey(
+        Salon,
+        on_delete=models.CASCADE,
+        related_name='appointments',
+        verbose_name='Салон'
+    )
+
+    appointment_date = models.DateField(verbose_name='Дата записи')
+    appointment_time = models.TimeField(verbose_name='Время записи')
+
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='confirmed',
+        verbose_name='Статус'
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Дата создания')
+
+    class Meta:
+        verbose_name = 'Запись'
+        verbose_name_plural = 'Записи'
+        ordering = ['-appointment_date', '-appointment_time']
+
+        unique_together = ['master', 'appointment_date', 'appointment_time']
+
+    def __str__(self):
+        return f"Запись {self.client} к {self.master} на {self.service}"
