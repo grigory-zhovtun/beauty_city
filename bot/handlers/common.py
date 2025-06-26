@@ -11,7 +11,6 @@ from bot.keyboards import get_main_menu_keyboard
 from asgiref.sync import sync_to_async
 from salon.models import Appointment, Client
 from datetime import datetime
-from django.conf import settings
 
 # Асинхронные обертки для ORM запросов
 @sync_to_async
@@ -116,15 +115,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=await get_main_menu_keyboard()
     )
 
-
-async def phone_booking(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        f"📞 Вы можете записаться по телефону нашего менеджера:\n\n"
-        f"☎️ {settings.MANAGER_PHONE}\n\n"
-        f"Мы работаем с 9:00 до 21:00 без выходных.",
-        reply_markup=await get_main_menu_keyboard()
-    )
-
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Помощь по боту:\n"
@@ -146,5 +136,4 @@ def register_handlers(application):
     application.add_handler(CommandHandler('help', help_command))
     application.add_handler(CommandHandler('cancel', cancel))
     application.add_handler(MessageHandler(filters.Regex('^Мои записи$'), my_appointments))
-    application.add_handler(MessageHandler(filters.Regex('^Записаться по телефону$'), phone_booking))
     application.add_handler(CallbackQueryHandler(cancel_appointment_handler, pattern="^cancel_"))
