@@ -11,7 +11,7 @@ Telegram-бот для автоматизации записи в салоны �
 ## Установка
 1. Склонируйте репозиторий:
 ```bash
-git clone https://github.com/ваш-username/beautycity-bot.git
+git clone https://https://github.com/Saenaru/Project_BeautyCity.git
 ```
    
 2. Установите зависимости:
@@ -21,5 +21,5 @@ pip install -r requirements.txt
 
 3. Запустите бота:
 ```bash
-python main.py
+python python run_bot.py
 ```

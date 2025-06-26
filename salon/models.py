@@ -251,5 +251,13 @@ class Appointment(models.Model):
 
         unique_together = ['master', 'appointment_date', 'appointment_time']
 
+    is_paid = models.BooleanField(default=False, verbose_name='Оплачено')
+    tip_amount = models.DecimalField(
+        max_digits=10, 
+        decimal_places=2, 
+        default=0, 
+        verbose_name='Чаевые'
+    )
+
     def __str__(self):
         return f"Запись {self.client} к {self.master} на {self.service}"
