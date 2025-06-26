@@ -115,6 +115,18 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=await get_main_menu_keyboard()
     )
 
+<<<<<<< Updated upstream
+=======
+
+async def phone_booking(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        f"📞 Вы можете записаться по телефону нашего менеджера:\n\n"
+        f"☎️ {settings.MANAGER_PHONE}\n\n"
+        f"Мы работаем с 9:00 до 19:00 без выходных.",
+        reply_markup=await get_main_menu_keyboard()
+    )
+
+>>>>>>> Stashed changes
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Помощь по боту:\n"

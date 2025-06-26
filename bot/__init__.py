@@ -1,9 +1,11 @@
 from telegram.ext import Application
 import os
 import django
+from django.conf import settings
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'beautycity.settings')
-django.setup()
+if not settings.configured:
+    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'beautycity.settings')
+    django.setup()
 
 def setup_bot():
     application = Application.builder().token(os.getenv('TELEGRAM_TOKEN')).build()
