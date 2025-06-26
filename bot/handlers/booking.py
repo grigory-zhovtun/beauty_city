@@ -195,18 +195,10 @@ async def choose_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
     selected_date = query.data.split('_')[1]
     context.user_data['date'] = selected_date
     
-    if 'master_id' in context.user_data:
-        schedule = await get_master_schedule(context.user_data['master_id'], selected_date)
-        if schedule:
-            await query.edit_message_text(
-                "Выберите время:",
-                reply_markup=await generate_times_keyboard()
-            )
-            return CHOOSE_TIME
-    
+    master_id = context.user_data.get('master_id')
     await query.edit_message_text(
         "Выберите время:",
-        reply_markup=await generate_times_keyboard()
+        reply_markup=await generate_times_keyboard(master_id=master_id, date=selected_date)
     )
     return CHOOSE_TIME
 
@@ -300,6 +292,25 @@ async def confirm_booking(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 }
             )
             
+            # Проверяем, свободно ли время у мастера
+            is_time_available = await sync_to_async(
+                lambda: not Appointment.objects.filter(
+                    master_id=master_id,
+                    appointment_date=date,
+                    appointment_time=time,
+                    status='confirmed'
+                ).exists()
+            )()
+            
+            if not is_time_available:
+                await query.edit_message_text(
+                    "⏳ К сожалению, мастер в это время уже занят.\n"
+                    "Пожалуйста, выберите другое время.",
+                    reply_markup=await generate_times_keyboard()
+                )
+                return CHOOSE_TIME
+            
+            # Если время свободно, создаем запись
             appointment = await create_appointment(
                 client=client,
                 master_id=master_id,
@@ -322,6 +333,7 @@ async def confirm_booking(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     context.user_data.clear()
     return ConversationHandler.END
+
 
 def register_handlers(application):
     conv_handler = ConversationHandler(

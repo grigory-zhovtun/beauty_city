@@ -6,7 +6,7 @@ from telegram import (
 )
 from asgiref.sync import sync_to_async
 from datetime import datetime, timedelta
-from salon.models import Master, Service, Salon
+from salon.models import Master, Service, Salon, Appointment
 
 @sync_to_async
 def get_active_masters():
@@ -112,12 +112,33 @@ async def generate_dates_keyboard():
     ]
     return InlineKeyboardMarkup(buttons)
 
-async def generate_times_keyboard():
-    times = ["10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00"]
+@sync_to_async
+def get_booked_times(master_id, date):
+    from django.db.models import TimeField
+    from django.db.models.functions import Cast
+    return list(Appointment.objects.filter(
+        master_id=master_id,
+        appointment_date=date,
+        status='confirmed'
+    ).annotate(
+        time_str=Cast('appointment_time', TimeField())
+    ).values_list('time_str', flat=True))
+
+async def generate_times_keyboard(master_id=None, date=None):
+    all_times = ["10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00"]
+    
+    if master_id and date:
+        booked_times = await get_booked_times(master_id, date)
+        booked_times_str = [t.strftime('%H:%M') for t in booked_times]
+        available_times = [t for t in all_times if t not in booked_times_str]
+    else:
+        available_times = all_times
+    
     buttons = [
-        [InlineKeyboardButton(time, callback_data=f"time_{time}")] for time in times
+        [InlineKeyboardButton(time, callback_data=f"time_{time}")] for time in available_times
     ]
     return InlineKeyboardMarkup(buttons)
+
 
 async def confirm_keyboard():
     return InlineKeyboardMarkup([
