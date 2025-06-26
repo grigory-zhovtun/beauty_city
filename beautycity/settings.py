@@ -20,6 +20,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'salon',
+    'rest_framework',
 ]
 
 MIDDLEWARE = [
