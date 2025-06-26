@@ -12,6 +12,10 @@ ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 
 SECRET_KEY = os.getenv('SECRET_KEY', 'REPLACE_ME')
 
+TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_TOKEN')
+
+MANAGER_PHONE = os.getenv('MANAGER_PHONE', '+7 (***) ***-**-**')
+
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -21,6 +25,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'salon',
     'rest_framework',
+    'bot',
 ]
 
 MIDDLEWARE = [
