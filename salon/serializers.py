@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Salon, Service, Master
+from .models import Salon, Service, Master, Appointment
 
 class SalonSerializer(serializers.ModelSerializer):
     """Сериализатор для модели Салона."""
@@ -32,3 +32,13 @@ class AvailableSlotSerializer(serializers.Serializer):
     slots = serializers.ListField(
         child=serializers.TimeField(format='%H:%M')
     )
+
+
+class AppointmentSerializer(serializers.ModelSerializer):
+    """Сериализатор для создания и отображения Записи."""
+    class Meta:
+        model = Appointment
+        fields = [
+            'id', 'client', 'master', 'service', 'salon',
+            'appointment_date', 'appointment_time', 'status', 'created_at'
+        ]

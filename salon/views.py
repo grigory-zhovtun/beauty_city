@@ -4,8 +4,8 @@ from rest_framework.views import APIView
 from rest_framework import status
 from datetime import datetime
 
-from .models import Salon, Service
-from .serializers import SalonSerializer, ServiceSerializer, AvailableSlotSerializer
+from .models import Salon, Service, Appointment
+from .serializers import SalonSerializer, ServiceSerializer, AvailableSlotSerializer, AppointmentSerializer
 from .services import get_services_in_salon, find_available_slots
 
 class SalonListView(generics.ListAPIView):
@@ -60,3 +60,13 @@ class SlotFinderView(APIView):
 
         serializer = AvailableSlotSerializer(results, many=True)
         return Response(serializer.data)
+
+
+class AppointmentCreateView(generics.CreateAPIView):
+    """
+    API эндпоинт для создания новой записи.
+    Принимает POST-запрос с данными для записи.
+    """
+    # queryset нужен, хотя мы и не будем выводить список
+    queryset = Appointment.objects.all()
+    serializer_class = AppointmentSerializer
