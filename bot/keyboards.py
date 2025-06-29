@@ -7,10 +7,12 @@ from telegram import (
 from asgiref.sync import sync_to_async
 from datetime import datetime, timedelta
 from salon.models import Master, Service, Salon
+from django.db.models import Min
 
 @sync_to_async
 def get_active_masters():
-    return list(Master.objects.filter(is_active=True).select_related('salon'))
+    ids = Master.objects.filter(is_active=True).values('first_name', 'last_name').annotate(min_id=Min('id')).values_list('min_id', flat=True)
+    return list(Master.objects.filter(id__in=ids).select_related('salon'))
 
 @sync_to_async
 def get_active_services():
@@ -50,7 +52,7 @@ async def get_main_menu_keyboard():
 
 @sync_to_async
 def get_masters_by_salon(salon_id):
-    return list(Master.objects.filter(salon_id=salon_id, is_active=True))
+    return list(Master.objects.filter(salon_id=salon_id, is_active=True).distinct())
 
 async def generate_masters_keyboard(salon_id=None):
     if salon_id:
@@ -66,6 +68,7 @@ async def generate_masters_keyboard(salon_id=None):
         buttons.append([InlineKeyboardButton(btn_text, callback_data=f"master_{master.id}")])
     
     return InlineKeyboardMarkup(buttons)
+
 
 async def generate_services_keyboard(master_id=None, salon_id=None):
     if master_id:
