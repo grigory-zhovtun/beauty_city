@@ -1,4 +1,4 @@
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import (
     ContextTypes, 
     CommandHandler, 
@@ -9,9 +9,44 @@ from telegram.ext import (
 )
 from bot.keyboards import get_main_menu_keyboard
 from asgiref.sync import sync_to_async
-from salon.models import Appointment, Client
+from salon.models import Appointment, Client, Feedback
 from datetime import datetime
 from django.conf import settings
+
+FEEDBACK = range(1)
+
+async def start_feedback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "Пожалуйста, напишите ваш отзыв о мастере или салоне.\n"
+        "Можете указать имя мастера, если хотите.",
+        reply_markup=ReplyKeyboardRemove()
+    )
+    return FEEDBACK
+
+async def receive_feedback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    feedback_text = update.message.text
+    user = update.effective_user
+    
+    await sync_to_async(Feedback.objects.create)(
+        client_telegram_id=user.id,
+        client_name=f"{user.first_name} {user.last_name or ''}",
+        text=feedback_text,
+        telegram_username=user.username
+    )
+    
+    await update.message.reply_text(
+        "Спасибо за ваш отзыв! Мы ценим ваше мнение.",
+        reply_markup=await get_main_menu_keyboard()
+    )
+    return ConversationHandler.END
+
+async def cancel_feedback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "Отзыв не был сохранен.",
+        reply_markup=await get_main_menu_keyboard()
+    )
+    return ConversationHandler.END
+
 
 # Асинхронные обертки для ORM запросов
 @sync_to_async
@@ -62,8 +97,7 @@ async def my_appointments(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"🏠 Салон: {appointment.salon.name}\n"
             f"📅 Дата: {appointment.appointment_date.strftime('%d.%m.%Y')}\n"
             f"⏰ Время: {appointment.appointment_time.strftime('%H:%M')}\n"
-            f"💵 Сумма: {appointment.service.price}₽\n"
-            f"Статус оплаты: {'✅ Оплачено' if appointment.is_paid else '❌ Не оплачено'}\n\n"
+            f"💵 Сумма: {appointment.service.price}₽\n\n"  # Убрана строка со статусом оплаты
         )
         keyboard.append([InlineKeyboardButton(
             f"❌ Отменить запись на {appointment.appointment_date.strftime('%d.%m')} в {appointment.appointment_time.strftime('%H:%M')}",
@@ -75,7 +109,6 @@ async def my_appointments(update: Update, context: ContextTypes.DEFAULT_TYPE):
         message,
         reply_markup=reply_markup
     )
-
 
 # Обработчик отмены записи
 async def cancel_appointment_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -96,6 +129,17 @@ async def cancel_appointment_handler(update: Update, context: ContextTypes.DEFAU
             reply_markup=None
         )
 
+async def send_tips(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    tip_url = "https://pay.cloudtips.ru/p/b643f03c"
+    
+    await update.message.reply_text(
+        "💝 Вы можете отправить чаевые нашему мастеру через безопасную платежную систему:\n\n"
+        f"Ссылка для оплаты: {tip_url}\n\n"
+        "Спасибо за вашу щедрость! Мастер обязательно оценит вашу благодарность.",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("💳 Перейти к оплате", url=tip_url)]
+        ])
+    )
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -148,3 +192,12 @@ def register_handlers(application):
     application.add_handler(MessageHandler(filters.Regex('^Мои записи$'), my_appointments))
     application.add_handler(MessageHandler(filters.Regex('^Записаться по телефону$'), phone_booking))
     application.add_handler(CallbackQueryHandler(cancel_appointment_handler, pattern="^cancel_"))
+    feedback_conv = ConversationHandler(
+        entry_points=[MessageHandler(filters.Regex('^Оставить отзыв$'), start_feedback)],
+        states={
+            FEEDBACK: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_feedback)]
+        },
+        fallbacks=[CommandHandler('cancel', cancel_feedback)]
+    )
+    application.add_handler(feedback_conv)
+    application.add_handler(MessageHandler(filters.Regex('^Отправить чаевые$'), send_tips))

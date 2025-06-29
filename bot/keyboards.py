@@ -48,7 +48,9 @@ async def get_main_menu_keyboard():
         [KeyboardButton("Записаться на процедуру")],
         [KeyboardButton("Записаться через салон")],
         [KeyboardButton("Мои записи")],
-        [KeyboardButton("Записаться по телефону")]
+        [KeyboardButton("Записаться по телефону")],
+        [KeyboardButton("Оставить отзыв")],
+        [KeyboardButton("Отправить чаевые")]
     ], resize_keyboard=True)
 
 @sync_to_async

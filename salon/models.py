@@ -236,6 +236,11 @@ class Appointment(models.Model):
     appointment_date = models.DateField(verbose_name='Дата записи')
     appointment_time = models.TimeField(verbose_name='Время записи')
 
+    tip_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    tip_paid = models.BooleanField(default=False)
+    tip_payment_id = models.CharField(max_length=100, blank=True, null=True)
+
+
     status = models.CharField(
         max_length=20,
         choices=STATUS_CHOICES,
@@ -261,3 +266,21 @@ class Appointment(models.Model):
 
     def __str__(self):
         return f"Запись {self.client} к {self.master} на {self.service}"
+    
+class Feedback(models.Model):
+    client_telegram_id = models.BigIntegerField()
+    client_name = models.CharField(max_length=255)
+    telegram_username = models.CharField(max_length=255, null=True, blank=True)
+    text = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    master = models.ForeignKey(
+        Master, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True
+    )
+    is_processed = models.BooleanField(default=False)
+
+    def __str__(self):
+        return f"Отзыв от {self.client_name} ({self.created_at})"
+
