@@ -74,6 +74,14 @@ def create_appointment(client, master_id, service_id, salon_id, date, time):
         status='confirmed'
     )
 
+@sync_to_async
+def get_booked_times(master_id, date):
+    return list(Appointment.objects.filter(
+        master_id=master_id,
+        appointment_date=date,
+        status='confirmed'
+    ).values_list('appointment_time', flat=True))
+
 async def start_booking(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     context.user_data.clear()
@@ -195,18 +203,29 @@ async def choose_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
     selected_date = query.data.split('_')[1]
     context.user_data['date'] = selected_date
     
-    if 'master_id' in context.user_data:
-        schedule = await get_master_schedule(context.user_data['master_id'], selected_date)
-        if schedule:
-            await query.edit_message_text(
-                "Выберите время:",
-                reply_markup=await generate_times_keyboard()
+    # Если запись через процедуру (by_service), пропускаем проверку мастера
+    if context.user_data.get('flow') == 'by_service':
+        await query.edit_message_text(
+            "Выберите время:",
+            reply_markup=await generate_times_keyboard(
+                master_id=context.user_data.get('master_id'),
+                date=context.user_data.get('date')
             )
-            return CHOOSE_TIME
+        )
+        return CHOOSE_TIME
     
+    # Для других типов записи проверяем наличие мастера
+    if 'master_id' not in context.user_data:
+        await query.edit_message_text("❌ Ошибка: не выбран мастер")
+        return ConversationHandler.END
+    
+    master_id = context.user_data['master_id']
     await query.edit_message_text(
         "Выберите время:",
-        reply_markup=await generate_times_keyboard()
+        reply_markup=await generate_times_keyboard(
+                master_id=context.user_data.get('master_id'),
+                date=context.user_data.get('date')
+            )
     )
     return CHOOSE_TIME
 
@@ -300,6 +319,24 @@ async def confirm_booking(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 }
             )
             
+            # Проверка на существующую запись
+            existing_appointment = await sync_to_async(
+                lambda: Appointment.objects.filter(
+                    master_id=master_id,
+                    appointment_date=date,
+                    appointment_time=time,
+                    status='confirmed'
+                ).exists()
+            )()
+            
+            if existing_appointment:
+                await query.edit_message_text(
+                    "⏰ К сожалению, на это время уже есть запись.\n"
+                    "Пожалуйста, выберите другое время.",
+                    reply_markup=await generate_times_keyboard()
+                )
+                return CHOOSE_TIME
+            
             appointment = await create_appointment(
                 client=client,
                 master_id=master_id,
@@ -313,8 +350,17 @@ async def confirm_booking(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"✅ Запись #{appointment.id} успешно оформлена! Ждем вас в салоне.\n\n"
                 f"Хотите записаться еще? /start"
             )
+            
         except Exception as e:
-            await query.edit_message_text(f"❌ Ошибка: {str(e)}")
+            if 'UNIQUE constraint failed' in str(e):
+                await query.edit_message_text(
+                    "⏰ К сожалению, на это время уже есть запись.\n"
+                    "Пожалуйста, выберите другое время.",
+                    reply_markup=await generate_times_keyboard()
+                )
+                return CHOOSE_TIME
+            else:
+                await query.edit_message_text(f"❌ Ошибка: {str(e)}")
     else:
         await query.edit_message_text(
             "Запись отменена. Можете начать заново /start"

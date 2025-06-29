@@ -6,7 +6,7 @@ from telegram import (
 )
 from asgiref.sync import sync_to_async
 from datetime import datetime, timedelta
-from salon.models import Master, Service, Salon
+from salon.models import Master, Service, Salon, Appointment
 from django.db.models import Min
 
 @sync_to_async
@@ -47,7 +47,8 @@ async def get_main_menu_keyboard():
         [KeyboardButton("Записаться к любимому мастеру")],
         [KeyboardButton("Записаться на процедуру")],
         [KeyboardButton("Записаться через салон")],
-        [KeyboardButton("Мои записи")]
+        [KeyboardButton("Мои записи")],
+        [KeyboardButton("Записаться по телефону")]
     ], resize_keyboard=True)
 
 @sync_to_async
@@ -114,11 +115,34 @@ async def generate_dates_keyboard():
     ]
     return InlineKeyboardMarkup(buttons)
 
-async def generate_times_keyboard():
-    times = ["10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00"]
+@sync_to_async
+def get_booked_times(master_id, date):
+    if master_id:
+        return list(Appointment.objects.filter(
+            master_id=master_id,
+            appointment_date=date,
+            status='confirmed'
+        ).values_list('appointment_time', flat=True))
+    else:
+        # Если мастер не указан, возвращаем пустой список занятых времен
+        return []
+
+async def generate_times_keyboard(master_id=None, date=None):
+    # Стандартные доступные временные слоты
+    all_times = ["10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00"]
+    
+    # Получаем занятые времена (только если указан мастер)
+    booked_times = await get_booked_times(master_id, date) if master_id and date else []
+    
+    # Форматируем занятые времена в строковый формат для сравнения
+    booked_times_str = [time.strftime("%H:%M") for time in booked_times] if master_id else []
+    
+    # Создаем кнопки только для свободных временных слотов
     buttons = [
-        [InlineKeyboardButton(time, callback_data=f"time_{time}")] for time in times
+        [InlineKeyboardButton(time, callback_data=f"time_{time}")]
+        for time in all_times if time not in booked_times_str
     ]
+    
     return InlineKeyboardMarkup(buttons)
 
 async def confirm_keyboard():
