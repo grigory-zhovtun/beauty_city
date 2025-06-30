@@ -87,3 +87,7 @@ AUTH_PASSWORD_VALIDATORS = [
 STATIC_URL = '/static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+
+# Bot settings
+from bot import setup_bot
+APP = setup_bot()

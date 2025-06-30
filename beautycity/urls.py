@@ -2,9 +2,11 @@ from django.contrib import admin
 from django.urls import path, include # <-- Добавь include
 from django.conf import settings
 from django.conf.urls.static import static
+from bot.webhook import webhook
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('webhook/', webhook),
     # Новая строка: все адреса из salon.urls будут доступны по префиксу /api/v1/
     path('api/v1/', include('salon.urls')),
 ]
