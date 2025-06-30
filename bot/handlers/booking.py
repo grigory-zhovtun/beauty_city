@@ -86,6 +86,24 @@ async def start_booking(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     context.user_data.clear()
     
+    has_consent = await sync_to_async(
+        lambda: Client.objects.filter(
+            telegram_id=update.effective_user.id,
+            consent_given=True
+        ).exists()
+    )()
+    
+    if not has_consent:
+        await update.message.reply_text(
+            "Для записи необходимо дать согласие на обработку персональных данных.\n"
+            "Пожалуйста, отправьте команду /start и подтвердите согласие."
+        )
+        return ConversationHandler.END
+
+    
+    text = update.message.text
+    context.user_data.clear()
+
     if text == "Записаться к любимому мастеру":
         context.user_data['flow'] = 'by_master'
         await update.message.reply_text(

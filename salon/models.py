@@ -148,6 +148,16 @@ class Client(models.Model):
         verbose_name='Фамилия'
     )
 
+    consent_given = models.BooleanField(
+        default=False,
+        verbose_name='Согласие на обработку данных'
+    )
+    consent_given_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Дата получения согласия'
+    )
+
     phone_regex = RegexValidator(
         regex=r'^\+?1?\d{9,15}$',
         message="Номер телефона должен быть в формате: '+999999999'"
@@ -239,6 +249,7 @@ class Appointment(models.Model):
     tip_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     tip_paid = models.BooleanField(default=False)
     tip_payment_id = models.CharField(max_length=100, blank=True, null=True)
+
 
 
     status = models.CharField(

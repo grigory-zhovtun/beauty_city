@@ -1,3 +1,4 @@
+import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import (
     ContextTypes, 
@@ -12,8 +13,12 @@ from asgiref.sync import sync_to_async
 from salon.models import Appointment, Client, Feedback
 from datetime import datetime
 from django.conf import settings
+from telegram.constants import ParseMode
+import os
 
 FEEDBACK = range(1)
+
+CONSENT = range(1)
 
 async def start_feedback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
@@ -70,11 +75,16 @@ def cancel_appointment(appointment_id):
 
 @sync_to_async
 def update_or_create_client(telegram_id, defaults):
-    client, created = Client.objects.update_or_create(
+    client, created = Client.objects.get_or_create(
         telegram_id=telegram_id,
         defaults=defaults
     )
-    return client
+    if not created:
+        # Если клиент уже существует, обновляем только необходимые поля
+        for key, value in defaults.items():
+            setattr(client, key, value)
+        client.save()
+    return client, created
 
 # Обработчик для кнопки "Мои записи"
 async def my_appointments(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -144,21 +154,82 @@ async def send_tips(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     
-    await update_or_create_client(
-        telegram_id=user.id,
-        defaults={
-            'first_name': user.first_name,
-            'last_name': user.last_name or '',
-            'telegram_username': user.username
-        }
+    try:
+        # Получаем клиента (без создания новой записи)
+        client = await sync_to_async(Client.objects.get)(telegram_id=user.id)
+        
+        # Если клиент уже давал согласие
+        if client.consent_given:
+            await update.message.reply_text(
+                "Добро пожаловать в BeautyCity! 🎉",
+                reply_markup=await get_main_menu_keyboard()
+            )
+            return ConversationHandler.END
+            
+        # Если клиент есть, но согласия нет
+        await request_consent(update)
+        return CONSENT
+        
+    except Client.DoesNotExist:
+        # Создаем нового клиента и запрашиваем согласие
+        client = await sync_to_async(Client.objects.create)(
+            telegram_id=user.id,
+            first_name=user.first_name,
+            last_name=user.last_name or '',
+            telegram_username=user.username,
+            consent_given=False
+        )
+        await request_consent(update)
+        return CONSENT
+
+async def request_consent(update: Update):
+    """Функция для запроса согласия"""
+    await update.message.reply_text(
+        "Перед началом работы нам необходимо ваше согласие..."
     )
     
-    await update.message.reply_text(
-        "Добро пожаловать в BeautyCity! 🎉\n"
-        "Я помогу вам записаться на процедуры.\n"
-        "Выберите действие:",
-        reply_markup=await get_main_menu_keyboard()
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    consent_path = os.path.join(current_dir, 'consent.pdf')
+    
+    await update.message.reply_document(
+        document=open(consent_path, 'rb'),
+        caption="Согласие на обработку данных",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("✅ Даю согласие", callback_data="consent_yes")],
+            [InlineKeyboardButton("❌ Не согласен", callback_data="consent_no")]
+        ])
     )
+
+
+async def handle_consent(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    
+    if query.data == "consent_yes":
+        # Обновляем запись клиента
+        await sync_to_async(Client.objects.filter(telegram_id=query.from_user.id).update)(
+            consent_given=True,
+            consent_given_at=datetime.now()
+        )
+        
+        await query.edit_message_text(
+            "Спасибо! Теперь вы можете пользоваться всеми возможностями бота.",
+            reply_markup=None
+        )
+        
+        await context.bot.send_message(
+            chat_id=query.from_user.id,
+            text="Выберите действие:",
+            reply_markup=await get_main_menu_keyboard()
+        )
+    else:
+        await query.edit_message_text(
+            "Для использования бота необходимо дать согласие на обработку персональных данных. "
+            "Вы можете вернуться в любое время и дать согласие, отправив команду /start.",
+            reply_markup=None
+        )
+    
+    return ConversationHandler.END
 
 
 async def phone_booking(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -168,6 +239,42 @@ async def phone_booking(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Мы работаем с 9:00 до 19:00 без выходных.",
         reply_markup=await get_main_menu_keyboard()
     )
+
+async def handle_consent_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    
+    # Обновляем только флаг согласия
+    await sync_to_async(Client.objects.filter(
+        telegram_id=query.from_user.id
+    ).update)(
+        consent_given=True,
+        consent_given_at=datetime.now()
+    )
+    
+    await query.edit_message_reply_markup(reply_markup=None)
+    await context.bot.send_message(
+        chat_id=query.from_user.id,
+        text="✅ Согласие подтверждено!",
+        reply_markup=await get_main_menu_keyboard()
+    )
+    return ConversationHandler.END
+
+async def handle_consent_no(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    
+    # Удаляем клавиатуру из предыдущего сообщения
+    await query.edit_message_reply_markup(reply_markup=None)
+    
+    # Отправляем новое сообщение
+    await context.bot.send_message(
+        chat_id=query.from_user.id,
+        text="❌ Для использования бота необходимо дать согласие на обработку персональных данных.\n\n"
+             "Вы можете вернуться и дать согласие позже, отправив команду /start."
+    )
+    return ConversationHandler.END
+
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
@@ -186,12 +293,27 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 def register_handlers(application):
-    application.add_handler(CommandHandler('start', start))
+    # Создаем ConversationHandler для обработки согласия
+    consent_conv = ConversationHandler(
+        entry_points=[CommandHandler('start', start)],
+        states={
+            CONSENT: [
+                CallbackQueryHandler(handle_consent_yes, pattern="^consent_yes$"),
+                CallbackQueryHandler(handle_consent_no, pattern="^consent_no$")
+            ]
+        },
+        fallbacks=[CommandHandler('cancel', cancel)]
+    )
+    
+    application.add_handler(consent_conv)
+
+    
+    # Остальные обработчики...
     application.add_handler(CommandHandler('help', help_command))
-    application.add_handler(CommandHandler('cancel', cancel))
     application.add_handler(MessageHandler(filters.Regex('^Мои записи$'), my_appointments))
     application.add_handler(MessageHandler(filters.Regex('^Записаться по телефону$'), phone_booking))
     application.add_handler(CallbackQueryHandler(cancel_appointment_handler, pattern="^cancel_"))
+    
     feedback_conv = ConversationHandler(
         entry_points=[MessageHandler(filters.Regex('^Оставить отзыв$'), start_feedback)],
         states={
@@ -200,4 +322,5 @@ def register_handlers(application):
         fallbacks=[CommandHandler('cancel', cancel_feedback)]
     )
     application.add_handler(feedback_conv)
+    
     application.add_handler(MessageHandler(filters.Regex('^Отправить чаевые$'), send_tips))
