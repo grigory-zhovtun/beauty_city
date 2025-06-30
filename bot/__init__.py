@@ -13,9 +13,11 @@ def setup_bot():
     from bot.handlers.common import register_handlers as register_common_handlers
     from bot.handlers.booking import register_handlers as register_booking_handlers
     from bot.handlers.payment import register_handlers as register_payment_handlers
+    from bot.handlers.admin_handlers import register_handlers as register_admin_handlers
     
     register_common_handlers(application)
     register_booking_handlers(application)
     register_payment_handlers(application)
+    register_admin_handlers(application)
     
     return application

@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Salon, Service, Master, Client, MasterSchedule
+from .models import Salon, Service, Master, Client, MasterSchedule, Admin
 
 @admin.register(Salon)
 class SalonAdmin(admin.ModelAdmin):
@@ -28,3 +28,9 @@ class ClientAdmin(admin.ModelAdmin):
 class MasterScheduleAdmin(admin.ModelAdmin):
     list_display = ['master', 'date', 'start_time', 'end_time']
     list_filter = ['date', 'master']
+
+
+@admin.register(Admin)
+class AdminAdmin(admin.ModelAdmin):
+    list_display = ['name', 'telegram_id', 'is_active']
+    search_fields = ['name', 'telegram_id']

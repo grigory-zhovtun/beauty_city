@@ -126,6 +126,18 @@ class Master(models.Model):
     def __str__(self):
         return f"{self.first_name} {self.last_name}"
 
+class Admin(models.Model):
+    telegram_id = models.BigIntegerField(unique=True, verbose_name='Telegram ID администратора')
+    name = models.CharField(max_length=100, verbose_name='Имя администратора')
+    is_active = models.BooleanField(default=True, verbose_name='Активен')
+
+    class Meta:
+        verbose_name = 'Администратор'
+        verbose_name_plural = 'Администраторы'
+
+    def __str__(self):
+        return f"{self.name} (ID: {self.telegram_id})"
+    
 
 class Client(models.Model):
     telegram_id = models.BigIntegerField(
@@ -140,7 +152,8 @@ class Client(models.Model):
     )
     first_name = models.CharField(
         max_length=100,
-        verbose_name='Имя'
+        verbose_name='Имя',
+        blank=True
     )
     last_name = models.CharField(
         max_length=100,

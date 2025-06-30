@@ -1,5 +1,5 @@
 import logging
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardRemove
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardRemove, KeyboardButton, ReplyKeyboardMarkup
 from telegram.ext import (
     ContextTypes, 
     CommandHandler, 
@@ -10,7 +10,7 @@ from telegram.ext import (
 )
 from bot.keyboards import get_main_menu_keyboard
 from asgiref.sync import sync_to_async
-from salon.models import Appointment, Client, Feedback
+from salon.models import Appointment, Client, Feedback, Admin
 from datetime import datetime
 from django.conf import settings
 from telegram.constants import ParseMode
@@ -19,6 +19,37 @@ import os
 FEEDBACK = range(1)
 
 CONSENT = range(1)
+
+@sync_to_async
+def is_admin(telegram_id):
+    return Admin.objects.filter(telegram_id=telegram_id, is_active=True).exists()
+
+async def get_admin_keyboard():
+    """Клавиатура для администратора"""
+    return ReplyKeyboardMarkup([
+        [KeyboardButton("Записаться к любимому мастеру")],
+        [KeyboardButton("Записаться на процедуру")],
+        [KeyboardButton("Записаться через салон")],
+        [KeyboardButton("Мои записи")],
+        [KeyboardButton("Все записи"), KeyboardButton("Все отзывы")],  # Добавлены кнопки для админа
+        [KeyboardButton("Записаться по телефону")],
+        [KeyboardButton("Оставить отзыв")],
+        [KeyboardButton("Отправить чаевые")]
+    ], resize_keyboard=True)
+
+async def get_user_keyboard():
+    """Клавиатура для обычного пользователя"""
+    return ReplyKeyboardMarkup([
+        [KeyboardButton("Записаться к любимому мастеру")],
+        [KeyboardButton("Записаться на процедуру")],
+        [KeyboardButton("Записаться через салон")],
+        [KeyboardButton("Мои записи")],
+        [KeyboardButton("Записаться по телефону")],
+        [KeyboardButton("Оставить отзыв")],
+        [KeyboardButton("Отправить чаевые")]
+    ], resize_keyboard=True)
+
+
 
 async def start_feedback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
@@ -154,6 +185,12 @@ async def send_tips(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     
+    # Проверяем, является ли пользователь администратором
+    admin = await is_admin(user.id)
+    
+    # Выбираем клавиатуру в зависимости от прав
+    reply_markup = await get_admin_keyboard() if admin else await get_user_keyboard()
+    
     try:
         # Получаем клиента (без создания новой записи)
         client = await sync_to_async(Client.objects.get)(telegram_id=user.id)
@@ -162,7 +199,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if client.consent_given:
             await update.message.reply_text(
                 "Добро пожаловать в BeautyCity! 🎉",
-                reply_markup=await get_main_menu_keyboard()
+                reply_markup=reply_markup
             )
             return ConversationHandler.END
             
@@ -181,6 +218,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         await request_consent(update)
         return CONSENT
+
 
 async def request_consent(update: Update):
     """Функция для запроса согласия"""
@@ -244,7 +282,7 @@ async def handle_consent_yes(update: Update, context: ContextTypes.DEFAULT_TYPE)
     query = update.callback_query
     await query.answer()
     
-    # Обновляем только флаг согласия
+    # Обновляем запись клиента
     await sync_to_async(Client.objects.filter(
         telegram_id=query.from_user.id
     ).update)(
@@ -252,10 +290,14 @@ async def handle_consent_yes(update: Update, context: ContextTypes.DEFAULT_TYPE)
         consent_given_at=datetime.now()
     )
     
+    # Удаляем кнопки согласия
     await query.edit_message_reply_markup(reply_markup=None)
+    
+    # Показываем главное меню
     await context.bot.send_message(
         chat_id=query.from_user.id,
-        text="✅ Согласие подтверждено!",
+        text="✅ Спасибо! Вы подтвердили согласие на обработку данных.\n\n"
+             "Выберите действие:",
         reply_markup=await get_main_menu_keyboard()
     )
     return ConversationHandler.END
@@ -276,14 +318,85 @@ async def handle_consent_no(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 
+async def all_appointments(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Проверяем права администратора
+    if not await is_admin(update.effective_user.id):
+        await update.message.reply_text("У вас нет доступа к этой команде.")
+        return
+
+    appointments = await sync_to_async(list)(Appointment.objects.select_related(
+        'client', 'master', 'service', 'salon'
+    ).order_by('-appointment_date', '-appointment_time'))
+
+    if not appointments:
+        await update.message.reply_text("Нет записей.")
+        return
+
+    message = "📝 Все записи:\n\n"
+    for app in appointments:
+        message += (
+            f"🔹 {app.client.first_name} {app.client.last_name or ''}\n"
+            f"📞 Телефон: {app.client.phone or 'не указан'}\n"
+            f"👩‍🎨 Мастер: {app.master.first_name} {app.master.last_name}\n"
+            f"💅 Услуга: {app.service.name}\n"
+            f"📅 Дата: {app.appointment_date.strftime('%d.%m.%Y')}\n"
+            f"⏰ Время: {app.appointment_time.strftime('%H:%M')}\n"
+            f"🏠 Салон: {app.salon.name}\n"
+            f"Статус: {'✅ Подтверждена' if app.status == 'confirmed' else '❌ Отменена'}\n\n"
+        )
+
+    # Разбиваем сообщение на части, если оно слишком длинное
+    for i in range(0, len(message), 4096):
+        await update.message.reply_text(message[i:i+4096])
+
+# Обработчик для кнопки "Все отзывы"
+async def all_feedback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Проверяем права администратора
+    if not await is_admin(update.effective_user.id):
+        await update.message.reply_text("У вас нет доступа к этой команде.")
+        return
+
+    feedbacks = await sync_to_async(list)(Feedback.objects.select_related(
+        'master'
+    ).order_by('-created_at'))
+
+    if not feedbacks:
+        await update.message.reply_text("Нет отзывов.")
+        return
+
+    message = "📢 Все отзывы:\n\n"
+    for fb in feedbacks:
+        message += (
+            f"👤 {fb.client_name} ({fb.telegram_username or 'нет username'})\n"
+            f"📅 {fb.created_at.strftime('%d.%m.%Y %H:%M')}\n"
+            f"💬 Отзыв: {fb.text}\n"
+            f"Мастер: {fb.master.first_name if fb.master else 'не указан'}\n"
+            f"Статус: {'✅ Обработан' if fb.is_processed else '❌ Не обработан'}\n\n"
+        )
+
+    # Разбиваем сообщение на части, если оно слишком длинное
+    for i in range(0, len(message), 4096):
+        await update.message.reply_text(message[i:i+4096])
+
+
+
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
+    is_admin = await sync_to_async(Admin.objects.filter(telegram_id=update.effective_user.id, is_active=True).exists)()
+    
+    message = (
         "Помощь по боту:\n"
         "/start - Начать диалог\n"
         "/help - Эта справка\n"
         "/cancel - Отменить текущее действие\n\n"
         "Просто нажмите на кнопку в меню для записи!"
     )
+    
+    if is_admin:
+        message += "\n\nКоманды администратора:\n"
+        message += "/admin - Меню администратора\n"
+        message += "Просмотр всех записей и отзывов"
+    
+    await update.message.reply_text(message)
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
@@ -306,8 +419,11 @@ def register_handlers(application):
     )
     
     application.add_handler(consent_conv)
+    # Обработчики для администратора
 
-    
+    application.add_handler(MessageHandler(filters.Regex('^Все записи$'), all_appointments))
+    application.add_handler(MessageHandler(filters.Regex('^Все отзывы$'), all_feedback))
+
     # Остальные обработчики...
     application.add_handler(CommandHandler('help', help_command))
     application.add_handler(MessageHandler(filters.Regex('^Мои записи$'), my_appointments))
