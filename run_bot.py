@@ -10,7 +10,7 @@ async def run_bot():
     
     async with setup_bot() as app:
         await app.start()
-        await app.updater.start_polling()
+        await app.updater.start_polling(drop_pending_updates=True)
         await asyncio.Event().wait()  # Бесконечное ожидание
 
 if __name__ == '__main__':
