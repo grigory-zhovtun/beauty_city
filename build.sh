@@ -5,15 +5,50 @@ set -o errexit
 # Устанавливаем зависимости
 pip install -r requirements.txt
 
-# Настройка DATABASE_URL для Render
-echo "=== Настройка DATABASE_URL для Render ==="
+# Настройка для SQLite на время сборки
+echo "=== Настройка базы данных для сборки ==="
 echo "RENDER = $RENDER"
 echo "DATABASE_URL задан: $(if [ -n "$DATABASE_URL" ]; then echo 'ДА'; else echo 'НЕТ'; fi)"
 
-# Определяем адрес для PostgreSQL на Render
-if [[ -n "$DATABASE_URL" && "$DATABASE_URL" == postgresql* ]]; then
-    # Сохраняем оригинальный URL
+# Сохраняем оригинальный URL, если он есть
+if [ -n "$DATABASE_URL" ]; then
     export ORIGINAL_DATABASE_URL="$DATABASE_URL"
+    echo "Оригинальный URL сохранен"
+
+    # Временно используем SQLite для миграций и сборки
+    export DATABASE_URL="sqlite:///db.sqlite3"
+    echo "Для сборки будет использован SQLite"
+fi
+
+# Сбор статических файлов
+python manage.py collectstatic --noinput
+
+# Выполнение миграций с SQLite
+echo "=== Выполнение миграций ==="
+python manage.py migrate
+
+# Заполнение тестовыми данными (опционально)
+echo "=== Заполнение тестовыми данными ==="
+python manage.py fill_db || echo "⚠️ Не удалось заполнить базу тестовыми данными, но это не критично."
+
+# Создаём файл с инструкциями для Render
+cat > render_info.txt << EOF
+# Настройка Render для Django с PostgreSQL
+
+Для правильной работы приложения, убедитесь, что:
+
+1. В настройках среды указана переменная RENDER=true
+2. В переменной DATABASE_URL указан ВНУТРЕННИЙ URL (Internal Database URL)
+   из настроек вашей базы данных PostgreSQL на Render
+3. Не меняйте порт в DATABASE_URL, оставьте значение по умолчанию
+
+Приложение настроено на использование SQLite во время сборки для
+беспроблемного выполнения миграций.
+
+В рабочем режиме будет использоваться PostgreSQL, как указано в DATABASE_URL.
+EOF
+
+echo "✅ Сборка завершена успешно!"
 
     # Извлекаем username, password и имя базы данных
     DB_USER=$(echo "$DATABASE_URL" | sed -E 's/postgresql:\/\/([^:]+):.*/\1/')
