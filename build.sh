@@ -2,14 +2,23 @@
 # exit on error
 set -o errexit
 
+# Устанавливаем зависимости
 pip install -r requirements.txt
 
 # Вывод отладочной информации
-echo "Проверка переменных окружения:"
+echo "=== Проверка настроек базы данных ==="
 echo "RENDER = $RENDER"
 echo "DATABASE_URL задан: $(if [ -n "$DATABASE_URL" ]; then echo 'ДА'; else echo 'НЕТ'; fi)"
-echo "Первые 10 символов DATABASE_URL: ${DATABASE_URL:0:10}..."
-echo "Полный DATABASE_URL: $DATABASE_URL"
+
+# Проверяем наличие EXTERNAL_URL в переменных окружения
+if [ -n "$EXTERNAL_DATABASE_URL" ]; then
+  echo "Используем EXTERNAL_DATABASE_URL для подключения к базе данных"
+  export DATABASE_URL="$EXTERNAL_DATABASE_URL"
+fi
+
+# Вывод URL базы данных (скрывая пароль)
+DISPLAY_URL=$(echo "$DATABASE_URL" | sed -r 's/([^:]+):([^@]+)@/\1:******@/')
+echo "URL базы данных: $DISPLAY_URL"
 
 # Добавим отладочный скрипт для проверки условий в settings.py
 cat > debug_db.py << 'EOF'
