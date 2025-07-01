@@ -57,7 +57,7 @@ echo "✅ Сборка завершена успешно!"
 
     # Устанавливаем новый URL
     export DATABASE_URL="$INTERNAL_DATABASE_URL"
-fi
+#fi
 
 # Создаем служебный файл для проверки настроек
 cat > check_db_settings.py << 'EOF'
