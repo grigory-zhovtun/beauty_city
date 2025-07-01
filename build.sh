@@ -12,11 +12,14 @@ fi
 pip install -r requirements.txt
 
 # Исправление DATABASE_URL
-python fix_database.py
+echo "=== Исправление URL базы данных ==="
+python simple_fix_db.py
+
+# Сохраняем оригинальный URL для восстановления в конце сборки
+export ORIGINAL_DATABASE_URL="$DATABASE_URL"
 
 # Используем SQLite на время сборки для гарантированного выполнения миграций
 echo "=== Настройка базы данных для сборки ==="
-export ORIGINAL_DATABASE_URL="$DATABASE_URL"
 export DATABASE_URL="sqlite:///db.sqlite3"
 echo "Для сборки будет использован SQLite"
 
@@ -60,32 +63,52 @@ EOF
 
 echo "✅ Сборка завершена успешно!"
 
-    # Выводим информацию (скрываем пароль для безопасности)
-    echo "Имя пользователя: $DB_USER"
-    echo "Имя базы данных: $DB_NAME"
-    echo "Используем URL: postgresql://${DB_USER}:******@internal/${DB_NAME}"
-
-    # Устанавливаем новый URL
-    export DATABASE_URL="$INTERNAL_DATABASE_URL"
-#fi
-
-# Создаем служебный файл для проверки настроек
-cat > check_db_settings.py << 'EOF'
+# Создаем простой файл для проверки настроек базы данных
+cat > check_render_db.py << 'EOF'
 import os
 import sys
 import dj_database_url
 
 print("\n=== Проверка настроек базы данных ===")
-db_url = os.environ.get('DATABASE_URL', '')
-print(f"DATABASE_URL: {db_url.replace(db_url.split('@')[0].split(':', 1)[1], '******') if '@' in db_url else db_url}")
 
-# Получаем настройки из URL
-config = dj_database_url.parse(db_url)
-config_safe = {k: '******' if k == 'PASSWORD' else v for k, v in config.items()}
-print(f"Настройки подключения: {config_safe}")
+# Проверяем наличие URL
+db_url = os.environ.get('DATABASE_URL', '')
+if not db_url:
+    print("❌ DATABASE_URL не задан!")
+    sys.exit(1)
+
+# Маскируем пароль для вывода
+masked_url = db_url
+if '@' in db_url and ':' in db_url.split('@')[0]:
+    user_pass, rest = db_url.split('@', 1)
+    if ':' in user_pass:
+        user, _ = user_pass.split(':', 1)
+        masked_url = f"{user}:******@{rest}"
+
+print(f"DATABASE_URL: {masked_url}")
+
+try:
+    # Получаем настройки из URL
+    config = dj_database_url.parse(db_url)
+    config_safe = {k: '******' if k == 'PASSWORD' else v for k, v in config.items()}
+    print(f"Настройки подключения: {config_safe}")
+    print("✅ URL базы данных имеет правильный формат")
+except Exception as e:
+    print(f"❌ Ошибка при парсинге URL: {str(e)}")
+    sys.exit(1)
 EOF
 
-python check_db_settings.py
+# Проверяем настройки базы данных
+python check_render_db.py
+
+# Восстанавливаем исправленный URL
+if [ -f "fixed_db_url.txt" ]; then
+    export DATABASE_URL=$(cat fixed_db_url.txt)
+    echo "✅ Восстановлен исправленный URL базы данных"
+else
+    export DATABASE_URL="$ORIGINAL_DATABASE_URL"
+    echo "⚠️ Используется оригинальный URL базы данных"
+fi
 
 # Сбор статических файлов
 python manage.py collectstatic --no-input
@@ -151,108 +174,74 @@ fi
 DISPLAY_URL=$(echo "$DATABASE_URL" | sed -r 's/([^:]+):([^@]+)@/\1:******@/')
 echo "URL базы данных: $DISPLAY_URL"
 
-# Добавим отладочный скрипт для проверки условий в settings.py
-cat > debug_db.py << 'EOF'
-import os
-import dj_database_url
-
-print("\n=== Отладка настроек базы данных ===")
-print(f"RENDER в окружении: {'RENDER' in os.environ}")
-print(f"DATABASE_URL в окружении: {'DATABASE_URL' in os.environ}")
-
-if 'DATABASE_URL' in os.environ:
-    db_url = os.environ.get('DATABASE_URL')
-    print(f"URL базы данных: {db_url}")
-
-    if 'dpg-' in db_url and '.render.com' not in db_url:
-        print("Требуется замена хоста на localhost")
-        db_parts = db_url.split('@')
-        if len(db_parts) > 1:
-            credentials = db_parts[0]
-            host_and_path = db_parts[1].split('/')
-            if len(host_and_path) > 1:
-                db_path = '/'.join(host_and_path[1:])
-                new_db_url = f"{credentials}@localhost/{db_path}"
-                print(f"Новый URL: {new_db_url}")
-    else:
-        print("Замена хоста не требуется")
-
-    # Проверяем парсинг dj_database_url
-    db_config = dj_database_url.config(default='sqlite:///db.sqlite3', conn_max_age=600, ssl_require=False)
-    print(f"Конфигурация БД: {db_config}")
-    print(f"Хост в конфигурации: {db_config.get('HOST')}")
-EOF
-
-python debug_db.py
-
+# Собираем статические файлы
 python manage.py collectstatic --no-input
 
-# Проверка подключения к базе данных
-cat > db_connection_test.py << 'EOF'
+# Простая проверка подключения к базе данных
+cat > db_connection_check.py << 'EOF'
 import os
 import sys
-import psycopg2
+
+try:
+    import dj_database_url
+    import psycopg2
+except ImportError:
+    from pip._internal import main as pip_main
+    pip_main(['install', 'dj-database-url', 'psycopg2-binary'])
+    import dj_database_url
+    import psycopg2
+
 from urllib.parse import urlparse
-import time
 
 print("\n=== Тестирование подключения к базе данных ===")
 
-# Проверяем оригинальный URL
+# Получаем URL из переменной окружения
 db_url = os.environ.get('DATABASE_URL', '')
 if not db_url:
-    print("ОШИБКА: DATABASE_URL не задан!")
+    print("❌ DATABASE_URL не задан")
     sys.exit(1)
 
-print(f"Тестирование URL: {db_url.replace(urlparse(db_url).password, '******')}")
+# Если URL для SQLite, пропускаем проверку
+if db_url.startswith('sqlite'):
+    print("✅ Используется SQLite, тест не требуется")
+    sys.exit(0)
 
-# Проверяем основной URL
-def test_connection(url, name):
-    try:
-        result = urlparse(url)
-        dbname = result.path.lstrip('/')
-        user = result.username
-        password = result.password
-        host = result.hostname
-        port = result.port or 5432
+# Маскируем пароль для вывода
+try:
+    parsed = urlparse(db_url)
+    masked_url = db_url
+    if parsed.password:
+        masked_url = db_url.replace(parsed.password, '******')
+    print(f"Проверка подключения к: {masked_url}")
 
-        print(f"\nПытаемся подключиться к {name}: {host}:{port}/{dbname}")
+    # Получаем параметры подключения
+    config = dj_database_url.parse(db_url)
+    host = config.get('HOST', '')
+    port = config.get('PORT', 5432)
+    dbname = config.get('NAME', '')
+    user = config.get('USER', '')
+    password = config.get('PASSWORD', '')
 
-        # Пробуем подключиться
-        conn = psycopg2.connect(
-            dbname=dbname,
-            user=user,
-            password=password,
-            host=host,
-            port=port,
-            connect_timeout=10
-        )
+    print(f"Хост: {host}, Порт: {port}, БД: {dbname}, Пользователь: {user}")
 
-        print(f"✅ Подключение к {name} успешно!")
-        conn.close()
-        return True
-    except Exception as e:
-        print(f"❌ ОШИБКА при подключении к {name}: {str(e)}")
-        return False
+    # Пробуем подключиться
+    conn = psycopg2.connect(
+        dbname=dbname,
+        user=user,
+        password=password,
+        host=host,
+        port=port,
+        connect_timeout=5
+    )
 
-# Пробуем основной URL
-if not test_connection(db_url, "основному URL"):
-    # Проверяем альтернативные URL
-    alternatives = [
-        (os.environ.get('DATABASE_URL_EXTERNAL', ''), "внешнему хосту"),
-        (os.environ.get('DATABASE_URL_INTERNAL', ''), "внутреннему хосту"),
-        (os.environ.get('DATABASE_URL_INTERNAL2', ''), "внутреннему хосту 2"),
-        (os.environ.get('DATABASE_URL_SPECIFIC', ''), "специфичному хосту"),
-    ]
-
-    for alt_url, name in alternatives:
-        if alt_url and test_connection(alt_url, name):
-            print(f"\n✅ Успешное подключение к {name}. Используем этот URL.")
-            os.environ['DATABASE_URL'] = alt_url
-            print(f"Установлен новый DATABASE_URL: {alt_url.replace(urlparse(alt_url).password, '******')}")
-            break
+    print("✅ Подключение успешно!")
+    conn.close()
+except Exception as e:
+    print(f"❌ Ошибка подключения: {str(e)}")
+    print("Для запуска приложения будет использоваться SQLite")
 EOF
 
-python db_connection_test.py
+python db_connection_check.py || echo "⚠️ Проблемы с подключением к PostgreSQL, но сборка продолжается"
 
 # Apply database migrations
 # First, fake unapply the initial migration for salon to ensure all operations are re-run

@@ -2,8 +2,13 @@
 # Скрипт запуска Django на Render
 set -o errexit
 
+# Убедимся, что RENDER установлен
+if [ -z "$RENDER" ]; then
+  export RENDER=true
+fi
+
 # Исправляем DATABASE_URL если нужно
-python fix_database.py
+python simple_fix_db.py
 
 # Применяем миграции к рабочей базе данных
 echo "=== Применение миграций ==="
