@@ -62,10 +62,36 @@ TEMPLATES = [
 DATABASES = {
     'default': dj_database_url.config(
            default='sqlite:///db.sqlite3',
-           conn_max_age=600
+           conn_max_age=600,
+           ssl_require=False  # Отключаем требование SSL для локальной разработки
     )
 
 }
+
+# Проверка и модификация DATABASE_URL для Render
+if 'RENDER' in os.environ and 'DATABASE_URL' in os.environ:
+    # Получаем текущий DATABASE_URL
+    db_url = os.environ.get('DATABASE_URL')
+
+    # Если URL содержит внешний хост Render, заменяем его на localhost
+    if 'dpg-' in db_url and '.render.com' not in db_url:
+        # Извлекаем все компоненты URL, кроме хоста
+        db_parts = db_url.split('@')
+        if len(db_parts) > 1:
+            credentials = db_parts[0]
+            host_and_path = db_parts[1].split('/')
+            if len(host_and_path) > 1:
+                # Заменяем проблемный хост на localhost
+                db_path = '/'.join(host_and_path[1:])
+                new_db_url = f"{credentials}@localhost/{db_path}"
+                os.environ['DATABASE_URL'] = new_db_url
+
+                # Обновляем конфигурацию базы данных
+                DATABASES['default'] = dj_database_url.config(
+                    default='sqlite:///db.sqlite3',
+                    conn_max_age=600,
+                    ssl_require=False
+                )
 
 ROOT_URLCONF = 'beautycity.urls'
 
