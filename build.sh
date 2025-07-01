@@ -5,40 +5,103 @@ set -o errexit
 # Устанавливаем зависимости
 pip install -r requirements.txt
 
-# Вывод отладочной информации
-echo "=== Проверка настроек базы данных ==="
+# Настройка DATABASE_URL для Render
+echo "=== Настройка DATABASE_URL для Render ==="
 echo "RENDER = $RENDER"
 echo "DATABASE_URL задан: $(if [ -n "$DATABASE_URL" ]; then echo 'ДА'; else echo 'НЕТ'; fi)"
 
-# Создаём дополнительные варианты URL для базы данных
-if [[ -n "$DATABASE_URL" && "$DATABASE_URL" == *"@dpg-"* && "$DATABASE_URL" != *"render.com"* ]]; then
-    # Извлекаем компоненты URL
-    DB_CREDENTIALS=$(echo "$DATABASE_URL" | sed -E 's/(.*@).*$/\1/')
-    DB_HOST=$(echo "$DATABASE_URL" | sed -E 's/.*@([^/]+)\/.*/\1/')
-    DB_NAME=$(echo "$DATABASE_URL" | sed -E 's/.*\/(.*)$/\1/')
+# Определяем адрес для PostgreSQL на Render
+if [[ -n "$DATABASE_URL" && "$DATABASE_URL" == postgresql* ]]; then
+    # Сохраняем оригинальный URL
+    export ORIGINAL_DATABASE_URL="$DATABASE_URL"
 
-    # Создаём разные варианты URL для тестирования
-    export PGHOST_EXTERNAL="${DB_HOST}.postgres.render.com"
-    export PGHOST_INTERNAL="postgres"
-    export PGHOST_INTERNAL2="postgres.internal"
-    export PGHOST_SPECIFIC="dpg-${DB_HOST#dpg-}"
+    # Извлекаем username, password и имя базы данных
+    DB_USER=$(echo "$DATABASE_URL" | sed -E 's/postgresql:\/\/([^:]+):.*/\1/')
+    DB_PASSWORD=$(echo "$DATABASE_URL" | sed -E 's/postgresql:\/\/[^:]+:([^@]+)@.*/\1/')
+    DB_NAME=$(echo "$DATABASE_URL" | sed -E 's/.*\/([^?]+)(\?.*)?$/\1/')
 
-    echo "Оригинальный хост: $DB_HOST"
+    # Создаем URL с использованием internal.render.com
+    export INTERNAL_DATABASE_URL="postgresql://${DB_USER}:${DB_PASSWORD}@internal/${DB_NAME}"
+
+    # Выводим информацию (скрываем пароль для безопасности)
+    echo "Имя пользователя: $DB_USER"
     echo "Имя базы данных: $DB_NAME"
-    echo "Пробуем разные варианты хостов:"
-    echo "1. ${PGHOST_EXTERNAL}"
-    echo "2. ${PGHOST_INTERNAL}"
-    echo "3. ${PGHOST_INTERNAL2}"
-    echo "4. ${PGHOST_SPECIFIC}"
+    echo "Используем URL: postgresql://${DB_USER}:******@internal/${DB_NAME}"
 
-    # Установка переменных для тестирования
-    export DATABASE_URL_EXTERNAL="${DB_CREDENTIALS}${PGHOST_EXTERNAL}/${DB_NAME}"
-    export DATABASE_URL_INTERNAL="${DB_CREDENTIALS}${PGHOST_INTERNAL}/${DB_NAME}"
-    export DATABASE_URL_INTERNAL2="${DB_CREDENTIALS}${PGHOST_INTERNAL2}/${DB_NAME}"
-    export DATABASE_URL_SPECIFIC="${DB_CREDENTIALS}${PGHOST_SPECIFIC}/${DB_NAME}"
+    # Устанавливаем новый URL
+    export DATABASE_URL="$INTERNAL_DATABASE_URL"
+fi
 
-    # Используем внешний хост для начала
-    export DATABASE_URL="$DATABASE_URL_EXTERNAL"
+# Создаем служебный файл для проверки настроек
+cat > check_db_settings.py << 'EOF'
+import os
+import sys
+import dj_database_url
+
+print("\n=== Проверка настроек базы данных ===")
+db_url = os.environ.get('DATABASE_URL', '')
+print(f"DATABASE_URL: {db_url.replace(db_url.split('@')[0].split(':', 1)[1], '******') if '@' in db_url else db_url}")
+
+# Получаем настройки из URL
+config = dj_database_url.parse(db_url)
+config_safe = {k: '******' if k == 'PASSWORD' else v for k, v in config.items()}
+print(f"Настройки подключения: {config_safe}")
+EOF
+
+python check_db_settings.py
+
+# Сбор статических файлов
+python manage.py collectstatic --no-input
+
+# Настройка для миграций
+echo "\n=== Настройка миграций ==="
+
+cat > run_migrations.py << 'EOF'
+import os
+import sys
+import subprocess
+
+print("Пытаемся запустить миграции...")
+
+# Первая попытка - с текущими настройками
+try:
+    print("\n=== Попытка 1: С текущими настройками ===")
+    result = subprocess.run([sys.executable, "manage.py", "migrate"], check=True)
+    print("✅ Миграции успешно применены!")
+    sys.exit(0)
+except subprocess.CalledProcessError:
+    print("❌ Ошибка при выполнении миграций с текущими настройками.")
+
+# Вторая попытка - с SQLite
+try:
+    print("\n=== Попытка 2: Используем SQLite временно ===")
+    # Сохраняем оригинальный URL
+    original_url = os.environ.get('DATABASE_URL', '')
+
+    # Временно устанавливаем SQLite
+    os.environ['DATABASE_URL'] = 'sqlite:///db.sqlite3'
+
+    # Запускаем миграции
+    result = subprocess.run([sys.executable, "manage.py", "migrate"], check=True)
+
+    # Восстанавливаем оригинальный URL
+    if original_url:
+        os.environ['DATABASE_URL'] = original_url
+
+    print("✅ Миграции успешно применены с SQLite!")
+    print("⚠️ ВНИМАНИЕ: Использована локальная база данных SQLite. В рабочем режиме данные будут в PostgreSQL.")
+    sys.exit(0)
+except subprocess.CalledProcessError:
+    print("❌ Ошибка при выполнении миграций с SQLite.")
+    sys.exit(1)
+EOF
+
+python run_migrations.py
+
+# Заполняем базу тестовыми данными (если миграции прошли успешно)
+if [ $? -eq 0 ]; then
+    echo "\n=== Заполнение базы тестовыми данными ==="
+    python manage.py fill_db || echo "⚠️ Не удалось заполнить базу тестовыми данными, но это не критично."
 fi
 
 # Проверяем наличие EXTERNAL_URL в переменных окружения

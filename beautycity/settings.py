@@ -68,45 +68,33 @@ DATABASES = {
 
 }
 
-# Проверка и модификация DATABASE_URL для Render
-if 'RENDER' in os.environ and 'DATABASE_URL' in os.environ:
-    # Получаем текущий DATABASE_URL
-    db_url = os.environ.get('DATABASE_URL')
-    print(f"Оригинальный DATABASE_URL: {db_url}")
+# Настройка базы данных для Render
+if 'RENDER' in os.environ:
+    print("\n=== Настройка базы данных для Render ===")
 
-    # Если URL содержит внешний хост Render, заменяем его
-    if 'dpg-' in db_url and '.render.com' not in db_url:
-        # Извлекаем все компоненты URL
-        db_parts = db_url.split('@')
-        if len(db_parts) > 1:
-            credentials = db_parts[0]
-            host_and_path = db_parts[1].split('/')
-            if len(host_and_path) > 1:
-                hostname = host_and_path[0]
-                # Заменяем проблемный хост на postgres внутренний сервис
-                db_path = '/'.join(host_and_path[1:])
+    # Получаем текущий DATABASE_URL (если есть)
+    db_url = os.environ.get('DATABASE_URL', '')
+    if db_url:
+        # Для безопасности: выводим URL, но скрываем пароль
+        parts = db_url.split('@')
+        if len(parts) > 1:
+            auth = parts[0].split(':', 1)
+            if len(auth) > 1:
+                masked_url = f"{auth[0]}:******@{parts[1]}"
+                print(f"Оригинальный DATABASE_URL: {masked_url}")
 
-                # Вариант 1: Используем postgres.render.com (внешний хост)
-                new_db_url = f"{credentials}@{hostname}.postgres.render.com/{db_path}"
-
-                # Вариант 2: Если первый не сработает, пробуем внутренний хост
-                # new_db_url = f"{credentials}@postgres/{db_path}"
-
-                print(f"Новый DATABASE_URL: {new_db_url}")
-                os.environ['DATABASE_URL'] = new_db_url
-
-    # Всегда обновляем конфигурацию базы данных после возможных изменений
+    # Обновляем настройки базы данных
     DATABASES['default'] = dj_database_url.config(
-        default='sqlite:///db.sqlite3',
         conn_max_age=600,
+        conn_health_checks=True,
         ssl_require=False
     )
 
-    # Выводим итоговую конфигурацию для отладки
-    db_config = DATABASES['default'].copy()
-    if 'PASSWORD' in db_config:
-        db_config['PASSWORD'] = '******'  # Скрываем пароль в логах
-    print(f"Конфигурация базы данных: {db_config}")
+    # Для отладки: вывод конфигурации
+    config_copy = DATABASES['default'].copy()
+    if 'PASSWORD' in config_copy:
+        config_copy['PASSWORD'] = '******'  # Скрываем пароль
+    print(f"Конфигурация базы данных: {config_copy}")
 
 ROOT_URLCONF = 'beautycity.urls'
 
