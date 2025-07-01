@@ -5,6 +5,10 @@ set -o errexit
 # Устанавливаем зависимости
 pip install -r requirements.txt
 
+# Проверка и исправление DATABASE_URL
+echo "=== Проверка DATABASE_URL ==="
+python check_db_url.py
+
 # Настройка для SQLite на время сборки
 echo "=== Настройка базы данных для сборки ==="
 echo "RENDER = $RENDER"
