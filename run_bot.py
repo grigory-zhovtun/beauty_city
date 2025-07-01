@@ -3,9 +3,18 @@
 Standalone bot runner for deployment
 """
 import os
+import sys
 import django
 import asyncio
 import logging
+
+# Исправляем URL базы данных для Render
+try:
+    if 'RENDER' in os.environ and os.path.exists('fix_render_db.py'):
+        print("Исправление URL базы данных для Render...")
+        exec(open('fix_render_db.py').read())
+except Exception as e:
+    print(f"Ошибка при исправлении URL базы данных: {str(e)}")
 
 # Setup Django
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'beautycity.settings')
