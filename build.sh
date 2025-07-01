@@ -2,17 +2,23 @@
 # exit on error
 set -o errexit
 
+# Установка нужных переменных окружения
+if [ -z "$RENDER" ]; then
+  export RENDER=true
+  echo "Установлена переменная RENDER=true"
+fi
+
 # Устанавливаем зависимости
 pip install -r requirements.txt
 
-# Проверка и исправление DATABASE_URL
-echo "=== Проверка DATABASE_URL ==="
-python check_db_url.py
+# Исправление DATABASE_URL
+python fix_database.py
 
-# Настройка для SQLite на время сборки
+# Используем SQLite на время сборки для гарантированного выполнения миграций
 echo "=== Настройка базы данных для сборки ==="
-echo "RENDER = $RENDER"
-echo "DATABASE_URL задан: $(if [ -n "$DATABASE_URL" ]; then echo 'ДА'; else echo 'НЕТ'; fi)"
+export ORIGINAL_DATABASE_URL="$DATABASE_URL"
+export DATABASE_URL="sqlite:///db.sqlite3"
+echo "Для сборки будет использован SQLite"
 
 # Сохраняем оригинальный URL, если он есть
 if [ -n "$DATABASE_URL" ]; then

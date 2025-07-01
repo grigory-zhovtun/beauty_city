@@ -59,41 +59,45 @@ TEMPLATES = [
     },
 ]
 
-# Настройка базы данных по умолчанию - SQLite
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
+# Настройка базы данных
+# Проверяем наличие файла с настройками базы данных
+try:
+    from database_config import DATABASES
+    print("Настройки базы данных загружены из database_config.py")
+except ImportError:
+    # Если файл не найден, используем стандартные настройки
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
+        }
     }
-}
 
-# Настройка базы данных из переменной окружения DATABASE_URL
-if 'DATABASE_URL' in os.environ:
-    db_url = os.environ.get('DATABASE_URL')
-    # Безопасное отображение URL (скрываем пароль)
-    masked_url = db_url
-    if '@' in db_url:
-        parts = db_url.split('@')
-        if len(parts) > 1 and ':' in parts[0]:
-            credentials = parts[0].split(':', 1)
-            if len(credentials) > 1:
-                masked_url = f"{credentials[0]}:******@{parts[1]}"
-    print(f"Используется DATABASE_URL: {masked_url}")
+    # Настройка базы данных из переменной окружения DATABASE_URL
+    if 'DATABASE_URL' in os.environ:
+        db_url = os.environ.get('DATABASE_URL')
+        try:
+            # Безопасное отображение URL (скрываем пароль)
+            masked_url = db_url
+            if '@' in db_url:
+                parts = db_url.split('@')
+                if len(parts) > 1 and ':' in parts[0]:
+                    credentials = parts[0].split(':', 1)
+                    if len(credentials) > 1:
+                        masked_url = f"{credentials[0]}:******@{parts[1]}"
+            print(f"Используется DATABASE_URL: {masked_url}")
 
-    # Применяем настройки из DATABASE_URL
-    db_config = dj_database_url.parse(db_url)
-    DATABASES['default'] = db_config
-    DATABASES['default']['CONN_MAX_AGE'] = 600
-
-    # Отключаем SSL для локального использования
-    if not os.environ.get('RENDER'):
-        DATABASES['default']['OPTIONS'] = {'sslmode': 'disable'}
-
-    # Для отладки: вывод конфигурации
-    config_copy = DATABASES['default'].copy()
-    if 'PASSWORD' in config_copy:
-        config_copy['PASSWORD'] = '******'  # Скрываем пароль
-    print(f"Конфигурация базы данных: {config_copy}")
+            # Применяем настройки из DATABASE_URL
+            db_config = dj_database_url.config(
+                default='sqlite:///db.sqlite3',
+                conn_max_age=600,
+                ssl_require=False
+            )
+            DATABASES['default'] = db_config
+            print(f"База данных настроена: {DATABASES['default'].get('ENGINE')}")
+        except Exception as e:
+            print(f"Ошибка при настройке базы данных: {str(e)}")
+            print("Используется SQLite по умолчанию")
 
 ROOT_URLCONF = 'beautycity.urls'
 
