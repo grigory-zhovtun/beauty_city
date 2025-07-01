@@ -1,14 +1,24 @@
 from telegram.ext import Application
-import os
-import django
-from django.conf import settings
+import logging
 
-if not settings.configured:
-    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'beautycity.settings')
-    django.setup()
+# Настройка логирования
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
 
 def setup_bot():
-    application = Application.builder().token(os.getenv('TELEGRAM_TOKEN')).build()
+    """Настройка и инициализация бота"""
+    from django.conf import settings
+    
+    # Получаем токен из настроек Django
+    token = settings.TELEGRAM_BOT_TOKEN
+    
+    if not token:
+        raise ValueError("TELEGRAM_BOT_TOKEN не установлен в настройках")
+    
+    application = Application.builder().token(token).build()
     
     from bot.handlers.common import register_handlers as register_common_handlers
     from bot.handlers.booking import register_handlers as register_booking_handlers
@@ -20,4 +30,11 @@ def setup_bot():
     register_payment_handlers(application)
     register_admin_handlers(application)
     
+    # Добавляем обработчик ошибок
+    application.add_error_handler(error_handler)
+    
     return application
+
+def error_handler(update, context):
+    """Обработчик ошибок"""
+    logger.error(f'Update {update} caused error {context.error}')

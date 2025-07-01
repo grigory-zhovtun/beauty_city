@@ -29,7 +29,7 @@ def get_all_appointments(date=None):
 
 @sync_to_async
 def get_all_feedback():
-    return list(Feedback.objects.all().order_by('-created_at'))
+    return list(Feedback.objects.select_related('master').order_by('-created_at'))
 
 async def admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update.effective_user.id):

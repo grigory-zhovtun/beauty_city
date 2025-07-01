@@ -20,7 +20,7 @@ from asgiref.sync import sync_to_async
 import re
 from salon.models import Master, Service, Salon, Appointment, Client, MasterSchedule
 from datetime import datetime
-
+from django.db import transaction
 # Состояния для ConversationHandler
 (
     CHOOSE_PATH, CHOOSE_MASTER, CHOOSE_SERVICE, 
@@ -31,7 +31,7 @@ from datetime import datetime
 # Асинхронные обертки для ORM запросов
 @sync_to_async
 def get_master(master_id):
-    return Master.objects.get(id=master_id)
+    return Master.objects.select_related('salon').prefetch_related('services').get(id=master_id)
 
 @sync_to_async
 def get_service(service_id):
@@ -43,13 +43,13 @@ def get_salon(salon_id):
 
 @sync_to_async
 def get_master_services(master_id):
-    master = Master.objects.get(id=master_id)
+    master = Master.objects.prefetch_related('services').get(id=master_id)
     return list(master.services.filter(is_active=True))
 
 @sync_to_async
 def get_master_salon(master_id):
     try:
-        master = Master.objects.get(id=master_id)
+        master = Master.objects.select_related('salon').get(id=master_id)
         return master.salon
     except Master.DoesNotExist:
         return None
@@ -64,15 +64,27 @@ def get_or_create_client(telegram_id, defaults):
 
 @sync_to_async
 def create_appointment(client, master_id, service_id, salon_id, date, time):
-    return Appointment.objects.create(
-        client=client,
-        master_id=master_id,
-        service_id=service_id,
-        salon_id=salon_id,
-        appointment_date=date,
-        appointment_time=time,
-        status='confirmed'
-    )
+    with transaction.atomic():
+        # Проверяем еще раз внутри транзакции с блокировкой
+        existing = Appointment.objects.select_for_update().filter(
+            master_id=master_id,
+            appointment_date=date,
+            appointment_time=time,
+            status='confirmed'
+        ).exists()
+        
+        if existing:
+            raise ValueError("Время уже занято")
+            
+        return Appointment.objects.create(
+            client=client,
+            master_id=master_id,
+            service_id=service_id,
+            salon_id=salon_id,
+            appointment_date=date,
+            appointment_time=time,
+            status='confirmed'
+        )
 
 @sync_to_async
 def get_booked_times(master_id, date):
@@ -320,7 +332,7 @@ async def confirm_booking(update: Update, context: ContextTypes.DEFAULT_TYPE):
             master_id = context.user_data.get('master_id')
             if not master_id:
                 master = await sync_to_async(
-                    lambda: Master.objects.filter(services__id=service_id, is_active=True).first()
+                    lambda: Master.objects.filter(services__id=service_id, is_active=True).select_related('salon').prefetch_related('services').first()
                 )()
                 if not master:
                     await query.edit_message_text("❌ Нет доступных мастеров для этой услуги")
@@ -337,32 +349,22 @@ async def confirm_booking(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 }
             )
             
-            # Проверка на существующую запись
-            existing_appointment = await sync_to_async(
-                lambda: Appointment.objects.filter(
+            try:
+                appointment = await create_appointment(
+                    client=client,
                     master_id=master_id,
-                    appointment_date=date,
-                    appointment_time=time,
-                    status='confirmed'
-                ).exists()
-            )()
-            
-            if existing_appointment:
+                    service_id=service_id,
+                    salon_id=salon_id,
+                    date=date,
+                    time=time
+                )
+            except ValueError:
                 await query.edit_message_text(
                     "⏰ К сожалению, на это время уже есть запись.\n"
                     "Пожалуйста, выберите другое время.",
                     reply_markup=await generate_times_keyboard()
                 )
                 return CHOOSE_TIME
-            
-            appointment = await create_appointment(
-                client=client,
-                master_id=master_id,
-                service_id=service_id,
-                salon_id=salon_id,
-                date=date,
-                time=time
-            )
             
             await query.edit_message_text(
                 f"✅ Запись #{appointment.id} успешно оформлена! Ждем вас в салоне.\n\n"

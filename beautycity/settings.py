@@ -88,6 +88,5 @@ STATIC_URL = '/static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
-# Bot settings
-from bot import setup_bot
-APP = setup_bot()
+# Bot settings - moved to a separate module to avoid circular imports
+# The bot will be initialized in the bot app's ready() method

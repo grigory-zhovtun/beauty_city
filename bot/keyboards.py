@@ -24,13 +24,13 @@ def get_all_salons():
 
 @sync_to_async
 def get_master_services(master_id):
-    master = Master.objects.get(id=master_id)
+    master = Master.objects.prefetch_related('services').get(id=master_id)
     return list(master.services.filter(is_active=True))
 
 @sync_to_async
 def get_master_salon(master_id):
     try:
-        master = Master.objects.get(id=master_id)
+        master = Master.objects.select_related('salon').get(id=master_id)
         return master.salon
     except Master.DoesNotExist:
         return None
@@ -40,7 +40,7 @@ def get_services_by_salon(salon_id):
     return list(Service.objects.filter(
         is_active=True,
         masters__salon_id=salon_id
-    ).distinct())
+    ).prefetch_related('masters').distinct())
 
 async def get_main_menu_keyboard():
     return ReplyKeyboardMarkup([
@@ -55,7 +55,7 @@ async def get_main_menu_keyboard():
 
 @sync_to_async
 def get_masters_by_salon(salon_id):
-    return list(Master.objects.filter(salon_id=salon_id, is_active=True).distinct())
+    return list(Master.objects.filter(salon_id=salon_id, is_active=True).select_related('salon').prefetch_related('services').distinct())
 
 async def generate_masters_keyboard(salon_id=None):
     if salon_id:
