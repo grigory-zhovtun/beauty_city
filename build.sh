@@ -15,6 +15,10 @@ pip install -r requirements.txt
 echo "=== Исправление URL базы данных ==="
 python simple_fix_db.py
 
+# Расширенная проверка и исправление подключения к базе данных
+echo "=== Проверка и настройка подключения к базе данных ==="
+python fix_db_connection.py
+
 # Сохраняем оригинальный URL для восстановления в конце сборки
 export ORIGINAL_DATABASE_URL="$DATABASE_URL"
 
