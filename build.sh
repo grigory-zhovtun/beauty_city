@@ -13,7 +13,7 @@ python manage.py showmigrations
 # Пытаемся применить миграции, игнорируя ошибки если таблицы уже существуют
 python manage.py migrate --fake-initial || echo "Migration failed, trying to fix..."
 
-# Если миграция не удалась, помечаем первую миграцию как выполненную
+# Если миграция не удалась, то помечаем первую миграцию как выполненную
 if [ $? -ne 0 ]; then
     echo "Marking initial migration as applied..."
     python manage.py migrate salon 0001_initial --fake
