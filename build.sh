@@ -50,14 +50,6 @@ EOF
 
 echo "✅ Сборка завершена успешно!"
 
-    # Извлекаем username, password и имя базы данных
-    DB_USER=$(echo "$DATABASE_URL" | sed -E 's/postgresql:\/\/([^:]+):.*/\1/')
-    DB_PASSWORD=$(echo "$DATABASE_URL" | sed -E 's/postgresql:\/\/[^:]+:([^@]+)@.*/\1/')
-    DB_NAME=$(echo "$DATABASE_URL" | sed -E 's/.*\/([^?]+)(\?.*)?$/\1/')
-
-    # Создаем URL с использованием internal.render.com
-    export INTERNAL_DATABASE_URL="postgresql://${DB_USER}:${DB_PASSWORD}@internal/${DB_NAME}"
-
     # Выводим информацию (скрываем пароль для безопасности)
     echo "Имя пользователя: $DB_USER"
     echo "Имя базы данных: $DB_NAME"
