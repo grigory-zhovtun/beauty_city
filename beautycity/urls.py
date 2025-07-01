@@ -6,7 +6,13 @@ from bot.webhook import webhook
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    re_path(r'^webhook/?, webhook),
+    re_path(r'^webhook/?
+    # Новая строка: все адреса из salon.urls будут доступны по префиксу /api/v1/
+    path('api/v1/', include('salon.urls')),
+]
+
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT), webhook),
     # Новая строка: все адреса из salon.urls будут доступны по префиксу /api/v1/
     path('api/v1/', include('salon.urls')),
 ]
